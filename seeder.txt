@@ -1,0 +1,55 @@
+/**
+ * Executar esta função uma única vez para preparar a planilha com dados reais de teste.
+ */
+function setupInitialData() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  
+  // 1. Popular Clientes (Orla Sul)
+  const abaClientes = getOrCreateSheet(ss, SCHEMA.CLIENTES.name);
+  const dadosClientes = [
+    ["ID", "Nome Fantasia", "Status", "Logradouro Primário", "Pedidos Ativos"],
+    ["CLI-001", "Quiosque do Português (Leme)", "Ativo", "Av. Atlântica, Posto 1", 0],
+    ["CLI-002", "Boteco Belmonte (Copacabana)", "Ativo", "Av. Atlântica, 3500", 0],
+    ["CLI-003", "Bar Jobi (Leblon)", "Ativo", "Av. Ataulfo de Paiva, 1166", 0],
+    ["CLI-004", "Cervantes (Copacabana)", "Ativo", "Rua Barata Ribeiro, 7", 0]
+  ];
+  abaClientes.getRange(1, 1, dadosClientes.length, dadosClientes[0].length).setValues(dadosClientes);
+
+  // 2. Popular Endereços (Geolocalização aproximada Orla Sul)
+  const abaEnderecos = getOrCreateSheet(ss, SCHEMA.ENDERECOS.name);
+  const dadosEnderecos = [
+    ["ID", "Cliente_ID", "Lat", "Long", "Logradouro", "Referência"],
+    ["END-001", "CLI-001", -22.9619, -43.1670, "Av. Atlântica, Q9", "Quiosque frente ao hotel"],
+    ["END-002", "CLI-002", -22.9806, -43.1915, "Av. Atlântica, 3500", "Esquina com Miguel Lemos"],
+    ["END-003", "CLI-003", -22.9841, -43.2234, "Av. Ataulfo de Paiva, 1166", "Perto do Canal de Jardim de Alah"],
+    ["END-004", "CLI-004", -22.9635, -43.1746, "Rua Barata Ribeiro, 7", "Balcão principal"]
+  ];
+  abaEnderecos.getRange(1, 1, dadosEnderecos.length, dadosEnderecos[0].length).setValues(dadosEnderecos);
+
+  // 3. Popular Produtos (Costa Verde - Simulado)
+  const abaProdutos = getOrCreateSheet(ss, SCHEMA.PRODUTOS.name);
+  const dadosProdutos = [
+    ["ID", "Nome", "Descrição", "Unidade", "Preço Unit (R$)", "Ativo"],
+    ["PROD-01", "Chopp de Vinho Costa Verde 30L", "Tambor lacrado, blend exclusivo de vinho tinto e chopp.", "Unitário", 480.00, true],
+    ["PROD-02", "Chopp Pilsen Costa Verde 50L", "O clássico da fábrica, leve e refrescante.", "Unitário", 650.00, true],
+    ["PROD-03", "Pack Long Neck Chopp (6 un)", "Pack com 6 garrafas de 355ml.", "Set", 58.90, true],
+    ["PROD-04", "Kit Degustação Costa Verde", "4 garrafas de estilos variados (Vinho, Pilsen, IPA, Black).", "Stack", 45.00, true]
+  ];
+  abaProdutos.getRange(1, 1, dadosProdutos.length, dadosProdutos[0].length).setValues(dadosProdutos);
+
+  // 4. Criar Cabeçalhos para Pedidos e Itens (se não existirem)
+  getOrCreateSheet(ss, SCHEMA.PEDIDOS.name).getRange(1,1,1,6).setValues([["ID","Cliente_ID","Itens_JSON","Total","Status","Timestamp"]]);
+  getOrCreateSheet(ss, SCHEMA.ITENS_PEDIDO.name).getRange(1,1,1,5).setValues([["ID","Pedido_ID","Prod_ID","Qtd","Subtotal"]]);
+
+  SpreadsheetApp.getUi().alert("Banco de Dados inicializado com sucesso!");
+}
+
+/**
+ * Função auxiliar para garantir que a aba exista
+ */
+function getOrCreateSheet(ss, name) {
+  let sheet = ss.getSheetByName(name);
+  if (!sheet) sheet = ss.insertSheet(name);
+  sheet.clear(); // Limpa para o seeder não duplicar dados no teste
+  return sheet;
+}

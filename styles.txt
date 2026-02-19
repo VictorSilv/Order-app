@@ -1,0 +1,634 @@
+<style>
+:root {
+  /* Paleta Light */
+  --mint-primary: #2ecc71;
+  --mint-light: #e8f8f0;
+  --bg-color: #ffffff;
+  --text-color: #2c3e50;
+  --card-bg: #f9f9f9;
+    /* Paleta Orla Sul & Costa Verde */
+  --gold-barley: #d4af37;
+  --ocean-blue: #2980b9;
+  --mint-action: #2ecc71;
+  --sunset-orange: #e67e22;
+  --sand-bg: #f4e7d3;
+  --bg-main: #ffffff;
+  --text-main: #2c3e50;
+  --card-bg: #ffffff;
+  --foam-white: #ffffff;
+  --beer-gold: #f1c40f;
+  --bg-side-1: var(--gold-barley);
+  --bg-side-2: var(--mint-action);
+  --bg-center: #ffffff;
+}
+/* Reset button background */
+#total-disclaimer .btn-reset,
+.btn-reset {
+  background-color: var(--sunset-orange) !important;
+}
+/* Submit button background */
+#total-disclaimer .btn-submit,
+#total-disclaimer #btn-submit,
+.btn-submit,
+#btn-submit {
+  background: linear-gradient(135deg, var(--ocean-blue), #1c5980) !important;
+}
+
+/* Hover states - invert colors */
+#total-disclaimer .btn-reset:hover,
+.btn-reset:hover {
+  background: transparent !important;
+  color: var(--sunset-orange) !important;
+  border: 2px solid var(--sunset-orange) !important;
+}
+
+#total-disclaimer .btn-submit:hover,
+#total-disclaimer #btn-submit:hover,
+.btn-submit:hover,
+#btn-submit:hover {
+  background: transparent !important;
+  color: var(--ocean-blue) !important;
+  border: 2px solid var(--ocean-blue) !important;
+}
+
+/* Remove any conflicting styles */
+#total-disclaimer button {
+  /* Reset any inherited colors */
+  color: white !important;
+}
+
+#total-disclaimer .btn-reset,
+#total-disclaimer .btn-submit,
+#total-disclaimer #btn-submit,
+.btn-reset,
+.btn-submit,
+#btn-submit {
+  color: white !important;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-color: #1a1a1a;
+    --text-color: #ecf0f1;
+    --text-main: #e0e0e0; 
+    --card-bg: #2c2c2c;
+  }
+  #cart-bubble,
+  .bubble,
+  .cart-container .bubble {
+    color: #ffffff !important;  /* Reinforce white text in dark mode */
+    background: #e74c3c;  /* Keep consistent background */
+  }
+  .modal-content {
+    background: var(--card-bg);
+    border-color: rgba(255, 255, 255, 0.1);
+  }
+  
+  .modal-input {
+    background: var(--bg-color);
+    border-color: var(--mint-action);
+  }
+  
+  .btn-reset {
+    background-color: var(--sunset-orange) !important;
+  }
+  
+  .btn-reset:hover {
+    background: transparent;
+    color: #e67e22;
+    border-color: #e67e22;
+  }
+  
+  .btn-submit,
+  #btn-submit {
+    background: linear-gradient(135deg, #2471a3, #1c5980);
+  }
+  
+  .btn-submit:hover,
+  #btn-submit:hover {
+    background: transparent;
+    color: #3498db;
+    border-color: #3498db;
+  }
+  
+ 
+  .br-value {
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  }
+  #total-disclaimer {
+    background: var(--card-bg); /* Darker background for dark mode */
+  }
+  
+  #total-disclaimer,
+  #total-disclaimer *,
+  #total-disclaimer span,
+  #total-disclaimer div,
+  #total-disclaimer .summary-row span,
+  #total-disclaimer .br-value {
+    color: var(--mint-primary) !important; /* Keep mint color in dark mode */
+  }
+
+  #total-disclaimer .btn-reset,
+  .btn-reset {
+    background-color: var(--sunset-orange) !important;
+    color: white !important;
+  }
+  
+  #total-disclaimer .btn-submit,
+  #total-disclaimer #btn-submit,
+  .btn-submit,
+  #btn-submit {
+    background: linear-gradient(135deg, #2471a3, #1c5980) !important;
+    color: white !important;
+  }
+
+
+}
+/* Base text color for everything */
+* {
+  color: var(--text-main);
+}
+
+/* Override for elements that might need different colors */
+button, .btn, .mint-bubble, .bubble {
+  /* These will keep their specific colors */
+  color: white;
+}
+
+/* Headers and other elements will inherit the main color */
+h1, h2, h3, h4, h5, h6, p, span, div, small {
+  color: var(--text-main);
+}
+
+body { 
+  margin: 0; padding: 0;
+  display: flex;
+  justify-content: center;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(90deg, var(--bg-side-1) 0%, var(--bg-center) 15%, var(--bg-center) 85%, var(--bg-side-2) 100%);
+  transition: all 0.5s ease;
+  min-height: 100vh;
+}
+/* O Frame "Cartão" Central */
+/* Alinhamento do Header e Footer no Frame */
+#app-header {
+  padding: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-bg);
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+.mint-bubble {
+  background-color: var(--mint-action);
+  color: white;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+
+/* Correção do Visor do Carrinho */
+.cart-container {
+  position: relative;
+  cursor: pointer;
+  padding: 10px;
+}
+
+.bubble {
+  position: absolute;
+  top: 0; right: 0;
+  background: #e74c3c;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.hidden { display: none !important; }
+
+/* Product Item Collapsible */
+details {
+  background: var(--card-bg);
+  margin: 10px;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+
+.qty-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: center;
+  padding: 15px;
+}
+
+.btn-plus { background-color: var(--mint-action) !important; color: white !important; }
+.btn-minus { background-color: var(--sunset-orange) !important; color: white !important; }
+
+/* Remova ou ajuste a cor de fundo genérica para não conflitar */
+.btn-qty {
+  border: none;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+
+
+
+
+.qty-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 50px; /* Estilo pílula */
+  border: 1px solid #ddd;
+}
+
+.qty-display {
+  font-size: 1.5rem;
+  font-weight: bold;
+  min-width: 40px;
+  text-align: center;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 20px;
+  transition: background-color 0.2s;
+  color: #2c3e50;
+}
+
+.qty-display:hover {
+  background: rgba(46, 204, 113, 0.1);
+}
+
+.qty-display:active {
+  transform: scale(0.95);
+}
+
+.btn-send-cart {
+  background-color: var(--ocean-blue);
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.btn-send-cart:active { transform: scale(0.9); }
+
+/* Card de Produto */
+.place-card {
+  background: var(--card-bg);
+  color: var(--text-main);
+  transition: all 0.3s ease;
+}
+
+.place-card h3,
+.place-card p,
+.place-card small {
+  color: var(--text-main);
+}
+
+.place-card:hover {
+  background: var(--card-bg);
+  filter: brightness(1.1);
+}
+
+/* For the static HTML elements */
+#app-header h1,
+#app-header .cart-container span {
+  color: var(--text-main);
+}
+
+/* Search input text color */
+#prod-search {
+  background: var(--card-bg);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.1);
+  
+  width: 90%;
+  margin: 15px auto;
+  display: block;
+  padding: 12px;
+  border-radius: 25px;
+  border: 1px solid #ddd;
+}
+
+#prod-search::placeholder {
+  color: var(--text-main);
+  opacity: 0.7;
+}
+/* Inputs de Busca */
+
+/* Itens de Produto */
+.product-item {
+  margin: 10px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  color: var(--text-main);
+}
+
+/* Force cart bubble text to always be white */
+#cart-bubble,
+.bubble,
+.cart-container .bubble {
+  color: #ffffff !important;  /* Force white text */
+  background: #e74c3c;  /* Keep the red background */
+}
+
+
+
+/* Also handle any potential inline styles or theme toggles */
+[data-theme="dark"] #cart-bubble,
+[data-theme="dark"] .bubble {
+  color: #ffffff !important;
+}
+[data-theme="dark"] {
+  --bg-main: #121212;
+  --text-main: #e0e0e0;
+  --card-bg: #1e1e1e;
+  --foam-white: #fdfdfd;   /* A espuma continua clara para o contraste do loader */
+  --bg-side-1: #4d3d0a; 
+  --bg-side-2: #145a32;
+  --bg-center: #121212;
+}
+
+/* Animação Inicial: A Espuma de Chopp */
+#beer-loader {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-color: var(--foam-white);
+  z-index: 9999;
+  display: flex; justify-content: center; align-items: center;
+  transition: transform 1s cubic-bezier(0.85, 0, 0.15, 1);
+}
+
+.foam-layer {
+  position: absolute;
+  bottom: 0; width: 100%; height: 100%;
+  background: var(--beer-gold);
+  animation: fillBeer 2s forwards;
+}
+
+@keyframes fillBeer {
+  0% { height: 0%; }
+  100% { height: 100%; }
+}
+
+/* Bolhas de Fundo */
+.bubble-particle {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  bottom: -20px;
+  animation: rise 3s infinite ease-in;
+  pointer-events: none;
+}
+
+@keyframes rise {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { transform: translateY(-300px) scale(1.5); opacity: 0; }
+}
+
+/* Switcher de Tema */
+.theme-toggle {
+  position: relative; top: -5px;
+  cursor: pointer; font-size: 1.5rem;
+  z-index: 100;
+}
+
+.product-item:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+.br-value { font-weight: bold; font-size: 1.2rem; color: var(--text-color); }
+
+/* Modal Styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 20px;
+  width: 90%;
+  max-width: 350px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  transform: scale(1);
+  transition: transform 0.3s ease;
+  border: 2px solid transparent;
+  border-image: linear-gradient(135deg, var(--gold-barley), var(--mint-action), var(--ocean-blue)) 1;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 1.3rem;
+}
+
+.modal-close {
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+  color: var(--text-main);
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  opacity: 1;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modal-product-info {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  background: var(--bg-color);
+  border-radius: 10px;
+  color: var(--text-main);
+  font-weight: bold;
+}
+
+#modal-product-name {
+  color: var(--text-main);
+}
+
+#modal-product-price {
+  color: var(--mint-action);
+  font-size: 1.2rem;
+}
+
+.modal-input {
+  padding: 15px;
+  font-size: 1.5rem;
+  text-align: center;
+  border: 2px solid var(--mint-action);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-weight: bold;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: var(--ocean-blue);
+  box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2);
+}
+
+/* Remove spinner buttons from number input */
+.modal-input::-webkit-inner-spin-button,
+.modal-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.modal-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.modal-actions button {
+  flex: 1;
+  padding: 12px;
+  font-size: 1rem;
+}
+
+[data-theme="dark"] .modal-content {
+  background: var(--card-bg);
+}
+/* Base Button Styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 50px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--mint-action);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: transparent;
+  color: var(--mint-action);
+  border: 2px solid var(--mint-action);
+}
+/* Footer Button Styles */
+.button-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 15px;
+  justify-content: space-between;
+}
+.btn-reset, 
+.btn-submit,
+#btn-submit {
+  flex: 1;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 50px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-submit,
+#btn-submit {
+  background: linear-gradient(135deg, var(--ocean-blue), #1c5980);
+  color: white;
+  border: 2px solid transparent;
+  position: relative;
+  z-index: 1;
+}
+
+#total-disclaimer {
+  position: fixed;  
+  bottom: 0; 
+  width: 100%;
+  left: 0;
+  background: var(--mint-light);
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 100;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  display: flex; 
+  flex-direction: column;
+}
+/* Set color for the disclaimer container and all its children */
+#total-disclaimer,
+#total-disclaimer *,
+#total-disclaimer span,
+#total-disclaimer div,
+#total-disclaimer .summary-row span,
+#total-disclaimer .br-value {
+  color: var(--mint-primary) !important;
+}
+</style>

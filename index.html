@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <base target="_top">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <?!= include('Styles'); ?>
+  </head>
+  <body>
+    <div id="app-main-container">
+      <!-- 1. Animação de Entrada -->
+      <div id="beer-loader">
+        <div class="foam-layer"></div>
+        <h1 class="loader-title">Trius Express</h1>
+      </div>
+      
+      <!-- 2. Cabeçalho Fixo no Topo do Frame -->
+      <header id="app-header">
+        <div class="theme-toggle" onclick="session.toggleTheme()" id="theme-icon">⚫</div>
+        <div class="logo">Trius Express</div>
+        <div id="shopcart-visor" class="cart-container" onclick="session.toggleCart()">
+          <span class="cart-icon">🛒</span>
+          <span id="cart-bubble" class="bubble">0</span>
+        </div>
+      </header>
+
+      <!-- 3. Área de Conteúdo Dinâmico -->
+      <main id="app-ui">
+        <div id="loader" class="center-content">
+          <p>Carregando Orla Sul...</p>
+          <div class="spinner"></div>
+        </div>
+      </main>
+
+      <!-- 4. Rodapé Fixo na Base do Frame -->
+      <footer id="total-disclaimer" class="hidden">
+        <div class="summary-row">
+          <span>Total Acumulado:</span>
+          <span id="total-value" class="br-value">R$ 0,00</span>
+        </div>
+        <div class="button-group">
+          <button onclick="session.reset()" class="btn-reset">Reset</button>
+          <button onclick="session.openConfirmModal()" id="btn-submit" class="btn-submit">Confirmar Pedido</button>
+        </div>
+      </footer>
+
+      <!-- 5. Modal de Confirmação (Dentro do container para alinhar) -->
+      <div id="modal-confirm" class="modal-overlay hidden">
+        <div class="modal-card">
+          <div class="modal-header">
+            <h2>Confirme seu Pedido 🍻</h2>
+            <button onclick="session.closeModal()" class="btn-close">&times;</button>
+          </div>
+          <div class="modal-body">
+            <div id="summary-destination" class="summary-box"></div>
+            <div id="summary-items" class="summary-list"></div>
+            <div class="summary-total-row">
+              <span>Total a Pagar:</span>
+              <span id="modal-total-value">R$ 0,00</span>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button onclick="session.closeModal()" class="btn-cancel">Revisar</button>
+            <button onclick="session.submit()" id="btn-final-submit" class="btn-confirm">Enviar para Fábrica</button>
+          </div>
+        </div>
+      </div>
+    <!-- Quantity Input Modal -->
+    <div id="qty-modal" class="modal hidden">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Digite a quantidade</h3>
+          <span class="modal-close" onclick="session.closeQtyModal()">&times;</span>
+        </div>
+        <div class="modal-body">
+          <div class="modal-product-info">
+            <span id="modal-product-name"></span>
+            <span id="modal-product-price"></span>
+          </div>
+          <input type="number" id="modal-qty-input" class="modal-input" 
+                min="1" max="999" value="1" step="1" 
+                placeholder="Quantidade">
+          <div class="modal-actions">
+            <button class="btn btn-secondary" onclick="session.closeQtyModal()">Cancelar</button>
+            <button class="btn btn-primary" onclick="session.confirmQtyInput()">Confirmar</button>
+          </div>
+        </div>
+      </div>
+    </div>  
+    </div> <!-- FIM DO APP-MAIN-CONTAINER -->
+
+    <script>
+      const appNotify = (msg, type = 'log') => {
+        console.log(`[${type.toUpperCase()}] ${new Date().toLocaleTimeString()}: ${msg}`);
+        if (type !== 'log') alert(`${type === 'error' ? '❌' : '✅'} ${msg}`);
+      };
+
+      window.addEventListener('load', () => {
+        google.script.run
+          .withSuccessHandler(data => {
+            appNotify("Dados carregados", "log");
+            session.init(data);
+          })
+          .withFailureHandler(err => appNotify("Erro: " + err.message, "error"))
+          .getInitialData();
+      });
+    </script>
+    <?!= include('JavaScript'); ?>
+  </body>
+</html>

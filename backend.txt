@@ -1,0 +1,127 @@
+/**
+ * CONFIGURAÇÃO DE SCHEMA: Mapeia o nome da coluna ao seu índice (0-based)
+ * Se a coluna mudar de lugar na aba, altere apenas este objeto.
+ */
+const SCHEMA = {
+  CLIENTES: { name: 'Clientes', id: 0, nome: 1, status: 2, loc_primaria: 3, pedidos_ativos: 4 },
+  ENDERECOS: { name: 'Enderecos', id: 0, cliente_id: 1, lat: 2, long: 3, logradouro: 4, referencia: 5 },
+  PRODUTOS: { name: 'Produtos', id: 0, nome: 1, descr: 2, unidade: 3, preco: 4, ativo: 5 },
+  PEDIDOS: { name: 'Pedidos', id: 0, cliente_id: 1, itens_json: 2, total: 3, status: 4, timestamp: 5 },
+  ITENS_PEDIDO: { name: 'Itens_Pedido', id: 0, pedido_id: 1, prod_id: 2, qtd: 3, subtotal: 4 }
+};
+
+/**
+ * Retorna os dados iniciais sanitizados para o frontend.
+ * Simula a localização na Orla Sul (Copacabana, Ipanema, Leblon).
+ */
+function getInitialData() {
+  try {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    
+    return {
+      clientes: getSheetData(ss, SCHEMA.CLIENTES),
+      enderecos: getSheetData(ss, SCHEMA.ENDERECOS),
+      produtos: getSheetData(ss, SCHEMA.PRODUTOS).filter(p => p.ativo === true || p.ativo === "true"),
+      config: {
+        currency: "R$",
+        timestamp: new Date().toISOString()
+      }
+    };
+  } catch (e) {
+    console.error("Erro ao carregar dados: " + e.message);
+    throw new Error("Falha na comunicação com o banco de dados.");
+  }
+}
+
+/**
+ * Helper para converter linhas da planilha em Objetos JSON usando o SCHEMA
+ */
+function getSheetData(ss, schemaMap) {
+  const sheet = ss.getSheetByName(schemaMap.name);
+  if (!sheet) return [];
+  
+  const values = sheet.getDataRange().getValues();
+  const header = values.shift(); // Remove cabeçalho
+  
+  return values.map(row => {
+    let obj = {};
+    for (let key in schemaMap) {
+      if (key === 'name') continue;
+      obj[key] = row[schemaMap[key]];
+    }
+    return obj;
+  });
+}
+
+// 2
+
+/**
+ * Processa o pedido vindo do frontend
+ * @param {Object} payload { cliente_id: string, itens: [{id, qtd, preco}], total: number }
+ * A gravação em bloco com setValues na aba ITENS_PEDIDO
+ * é um  sistema de engenharia. Isso reduz as chamadas de API do Google,
+ * que são o principal gargalo de performance.
+ */
+function processOrder(payload) {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  // LockService: Essencial para apps com múltiplos usuários. 
+  // Ele impede que dois pedidos recebam o mesmo ID 
+  // se clicarem em "Submit" exatamente ao mesmo tempo.
+  const lock = LockService.getScriptLock();
+  
+  try {
+    // Aguarda até 30s para evitar colisões de escrita simultânea
+    lock.waitLock(30000);
+
+    const abaPedidos = ss.getSheetByName(SCHEMA.PEDIDOS.name);
+    const abaItens = ss.getSheetByName(SCHEMA.ITENS_PEDIDO.name);
+    // O uso de .padStart(4, '0') garante que seus IDs fiquem organizados visualmente na planilha 
+    // como PED-0001, PED-0010, etc.
+    // 1. Gerar ID Incremental (PED-XXXX)
+    const proximoId = "PED-" + (abaPedidos.getLastRow()).toString().padStart(4, '0');
+    const timestamp = new Date();
+
+    // 2. Gravar na aba PEDIDOS (Cabeçalho)
+    // Ordem: ID, Cliente_ID, Itens_JSON, Total, Status, Timestamp
+    const linhaPedido = [
+      proximoId, 
+      payload.cliente_id, 
+      JSON.stringify(payload.itens), 
+      payload.total, 
+      "Aguardando Entrega", 
+      timestamp
+    ];
+    abaPedidos.appendRow(linhaPedido);
+
+    // 3. Gravar na aba ITENS_PEDIDO (Desmembramento para BI)
+    // Ordem: ID (item), Pedido_ID, Prod_ID, Qtd, Subtotal
+    const rowsItens = payload.itens.map((item, index) => {
+      return [
+        `${proximoId}-ITM-${(index + 1).toString().padStart(2, '0')}`,
+        proximoId,
+        item.id,
+        item.qtd,
+        (item.qtd * item.preco)
+      ];
+    });
+    // Para os itens do pedido, usamos setValues em vez de appendRow em um loop.
+    // Isso é drasticamente mais rápido e evita timeouts no Google Apps Script.
+    abaItens.getRange(abaItens.getLastRow() + 1, 1, rowsItens.length, 5).setValues(rowsItens);
+
+    // 4. Registrar Log de Sucesso (Opcional, mas recomendado)
+    console.log(`Pedido ${proximoId} processado com sucesso para cliente ${payload.cliente_id}`);
+
+    lock.releaseLock();
+    // limpar cache do servidor:
+    SessionManager.clearSessionCache(payload.cliente_id);
+    return { success: true, pedidoId: proximoId };
+
+  } catch (e) {
+    if (lock.hasLock()) lock.releaseLock();
+    console.error("Erro no processOrder: " + e.message);
+    return { success: false, error: e.message };
+  }
+}
+
+// 3
+

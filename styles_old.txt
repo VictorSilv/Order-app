@@ -1,0 +1,254 @@
+<style>
+:root {
+  /* Paleta Light */
+  --mint-primary: #2ecc71;
+  --mint-light: #e8f8f0;
+  --bg-color: #ffffff;
+  --text-color: #2c3e50;
+  --card-bg: #f9f9f9;
+    /* Paleta Orla Sul & Costa Verde */
+  --gold-barley: #d4af37;
+  --ocean-blue: #2980b9;
+  --mint-action: #2ecc71;
+  --sunset-orange: #e67e22;
+  --sand-bg: #f4e7d3;
+  --bg-main: #ffffff;
+  --text-main: #2c3e50;
+  --card-bg: #ffffff;
+  --foam-white: #ffffff;
+  --beer-gold: #f1c40f;
+  --bg-side-1: var(--gold-barley);
+  --bg-side-2: var(--mint-action);
+  --bg-center: #ffffff;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-color: #1a1a1a;
+    --text-color: #ecf0f1;
+    --card-bg: #2c2c2c;
+  }
+}
+
+body { 
+  margin: 0; padding: 0;
+  display: flex;
+  justify-content: center;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(90deg, var(--bg-side-1) 0%, var(--bg-center) 15%, var(--bg-center) 85%, var(--bg-side-2) 100%);
+  transition: all 0.5s ease;
+  min-height: 100vh;
+}
+/* O Frame "Cartão" Central */
+/* Alinhamento do Header e Footer no Frame */
+#app-header {
+  padding: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-bg);
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+.mint-bubble {
+  background-color: var(--mint-action);
+  color: white;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+#total-disclaimer {
+  position: absolute; /* Fixa no fundo do app-main-container, não da janela */
+  bottom: 0; 
+  width: 100%;
+  left: 0;
+  background: var(--mint-light);
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 100;
+}
+
+/* Correção do Visor do Carrinho */
+.cart-container {
+  position: relative;
+  cursor: pointer;
+  padding: 10px;
+}
+
+.bubble {
+  position: absolute;
+  top: 0; right: 0;
+  background: #e74c3c;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.hidden { display: none !important; }
+
+/* Product Item Collapsible */
+details {
+  background: var(--card-bg);
+  margin: 10px;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+summary { 
+  list-style: none; 
+  display: flex; 
+  justify-content: space-between; 
+  align-items: center;
+  cursor: pointer;
+}
+
+.qty-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: center;
+  padding: 15px;
+}
+
+.btn-plus { background-color: var(--mint-action) !important; color: white !important; }
+.btn-minus { background-color: var(--sunset-orange) !important; color: white !important; }
+
+/* Remova ou ajuste a cor de fundo genérica para não conflitar */
+.btn-qty {
+  border: none;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+
+#total-disclaimer {
+  position: fixed;
+  bottom: 0; width: 100%;
+  background: var(--mint-light);
+  color: #27ae60;
+  padding: 20px;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  display: flex; flex-direction: column;
+  box-sizing: border-box;
+}
+
+
+.qty-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 50px; /* Estilo pílula */
+  border: 1px solid #ddd;
+}
+
+.qty-display {
+  font-size: 1.5rem;
+  font-weight: bold;
+  min-width: 40px;
+  text-align: center;
+}
+
+.btn-send-cart {
+  background-color: var(--ocean-blue);
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.btn-send-cart:active { transform: scale(0.9); }
+
+/* Card de Produto */
+/* Inputs de Busca */
+#prod-search {
+  width: 90%;
+  margin: 15px auto;
+  display: block;
+  padding: 12px;
+  border-radius: 25px;
+  border: 1px solid #ddd;
+  background: var(--card-bg);
+  color: var(--text-main);
+}
+
+/* Itens de Produto */
+.product-item {
+  margin: 10px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  overflow: hidden;
+  color: var(--text-main);
+}
+
+[data-theme="dark"] {
+  --bg-main: #121212;
+  --text-main: #e0e0e0;
+  --card-bg: #1e1e1e;
+  --foam-white: #fdfdfd;   /* A espuma continua clara para o contraste do loader */
+  --bg-side-1: #4d3d0a; 
+  --bg-side-2: #145a32;
+  --bg-center: #121212;
+}
+
+/* Animação Inicial: A Espuma de Chopp */
+#beer-loader {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-color: var(--foam-white);
+  z-index: 9999;
+  display: flex; justify-content: center; align-items: center;
+  transition: transform 1s cubic-bezier(0.85, 0, 0.15, 1);
+}
+
+.foam-layer {
+  position: absolute;
+  bottom: 0; width: 100%; height: 100%;
+  background: var(--beer-gold);
+  animation: fillBeer 2s forwards;
+}
+
+@keyframes fillBeer {
+  0% { height: 0%; }
+  100% { height: 100%; }
+}
+
+/* Bolhas de Fundo */
+.bubble-particle {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  bottom: -20px;
+  animation: rise 3s infinite ease-in;
+  pointer-events: none;
+}
+
+@keyframes rise {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { transform: translateY(-300px) scale(1.5); opacity: 0; }
+}
+
+/* Switcher de Tema */
+.theme-toggle {
+  position: absolute; top: 15px; right: 60px;
+  cursor: pointer; font-size: 1.5rem;
+  z-index: 100;
+}
+
+.product-item:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+.br-value { font-weight: bold; font-size: 1.2rem; }
+</style>

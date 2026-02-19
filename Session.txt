@@ -1,0 +1,60 @@
+// Lógica de servidor para persistência de estado (via CacheService) e processamento do pedido.
+// Session.gs é o lugar perfeito para gerenciar o estado que não deve depender apenas do dispositivo do utilizador, como o CacheService para resiliência de rede.
+
+
+/**
+ * Lógica de Servidor para Gerenciamento de Estado e Cache
+ */
+const SessionManager = {
+  
+  CACHE_KEY_PREFIX: "USER_CART_",
+
+  /**
+   * Salva o estado do carrinho no cache do servidor para evitar perda de dados
+   * Útil caso o usuário troque de aba ou o navegador limpe o localStorage.
+   */
+  saveSessionCache: function(userId, cartData) {
+    try {
+      const cache = CacheService.getUserCache();
+      // Armazena por 2 horas (7600 segundos)
+      cache.put(this.CACHE_KEY_PREFIX + userId, JSON.stringify(cartData), 21600);
+      console.log(`[CACHE] Sessão salva para usuário: ${userId}`);
+    } catch (e) {
+      console.error("[ERROR] Falha ao salvar cache: " + e.message);
+    }
+  },
+
+  /**
+   * Recupera o estado do carrinho do cache do servidor
+   */
+  getSessionCache: function(userId) {
+    try {
+      const cache = CacheService.getUserCache();
+      const cached = cache.get(this.CACHE_KEY_PREFIX + userId);
+      return cached ? JSON.parse(cached) : null;
+    } catch (e) {
+      console.error("[ERROR] Falha ao ler cache: " + e.message);
+      return null;
+    }
+  },
+
+  /**
+   * Remove o cache após a finalização do pedido
+   */
+  clearSessionCache: function(userId) {
+    const cache = CacheService.getUserCache();
+    cache.remove(this.CACHE_KEY_PREFIX + userId);
+  }
+};
+
+/**
+ * Entry-points que o Frontend (google.script.run) pode chamar para o Cache
+ */
+function syncCache(userId, cartData) {
+  SessionManager.saveSessionCache(userId, cartData);
+}
+
+function getStoredCache(userId) {
+  return SessionManager.getSessionCache(userId);
+}
+
