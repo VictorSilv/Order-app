@@ -27,6 +27,9 @@ class AppSession {
   init(initialData) {
     appNotify("Iniciando componentes da sessão...", "log");
     this.data = initialData;
+    // Load saved theme first
+    this.loadTheme();
+  
     this.renderPlaces();
     const saved = localStorage.getItem('costa_verde_session');
     this.hideLoader()
@@ -401,6 +404,8 @@ class AppSession {
     // Limpa cache local
     localStorage.removeItem('costa_verde_session');
     
+    //Close Confirm MOdal
+    this.closeModal();
     // Reseta UI
     document.body.style.backgroundColor = "";  
     
@@ -541,12 +546,37 @@ class AppSession {
   toggleTheme() {
     const body = document.body;
     const currentTheme = body.getAttribute('data-theme');
-    const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
     
-    body.setAttribute('data-theme', newTheme);
-    document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '☀️' : '⚫';
-    localStorage.setItem('theme_pref', newTheme);
-    appNotify(`Tema alterado para ${newTheme}`, "log");
+    // If no theme set or current theme is system-dependent
+    if (!currentTheme || currentTheme === 'system') {
+      // Check system preference
+      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+      const newTheme = systemPrefersDark ? 'light' : 'dark';
+      body.setAttribute('data-theme', newTheme);
+      document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '☀️' : '⚫';
+    } else {
+      // Toggle between light and dark
+      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+      body.setAttribute('data-theme', newTheme);
+      document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '☀️' : '⚫';
+    }
+    
+    localStorage.setItem('theme_pref', body.getAttribute('data-theme'));
+    appNotify(`Tema alterado`, "log");
+  }
+
+  // Add this to your init method to load saved preference
+  loadTheme() {
+    const savedTheme = localStorage.getItem('theme_pref');
+    if (savedTheme) {
+      document.body.setAttribute('data-theme', savedTheme);
+      document.getElementById('theme-icon').innerText = savedTheme === 'dark' ? '☀️' : '⚫';
+    } else {
+      // Check system preference
+      //const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+       document.body.setAttribute('data-theme', 'light');
+    document.getElementById('theme-icon').innerText = '⚫';
+    }
   }
   /**
    * Cria partículas de bolhas ao adicionar itens
@@ -673,37 +703,6 @@ confirmQtyInput() {
   this.closeQtyModal();
 }
 
-// Modified sendToCart to use temp quantity if available
-sendToCart(productId) {
-  // Check if there's a temp quantity set
-  const tempQty = this.tempQtys?.[productId] || 
-                  parseInt(document.getElementById(`temp-qty-${productId}`)?.textContent || '0');
-  
-  if (tempQty > 0) {
-    // Add to cart with the temp quantity
-    if (!this.cart[productId]) {
-      this.cart[productId] = {
-        id: productId,
-        qtd: 0,
-        preco: this.data.produtos.find(p => p.id === productId).preco
-      };
-    }
-    
-    // Update cart quantity
-    this.cart[productId].qtd = tempQty;
-    
-    // Clear temp quantity
-    if (this.tempQtys) delete this.tempQtys[productId];
-    document.getElementById(`temp-qty-${productId}`).textContent = '0';
-    
-    // Update UI
-    this.updateUI();
-    
-    appNotify(`${tempQty} unidades adicionadas ao carrinho`, "success");
-  } else {
-    appNotify("Defina uma quantidade primeiro", "warning");
-  }
-}
 }
 // Instanciação Global
 const session = new AppSession();
