@@ -1,710 +1,704 @@
-<script>
-/**
- * CLASSE SESSION: Gerenciador de Estado da Aplicação
- * Responsável pelo ciclo de vida do pedido, renderização e UX.
- */
-class AppSession {
-  constructor() {
-    // Estado da Sessão (Single Source of Truth)
-    this.data = { clientes: [], enderecos: [], produtos: [] };
-    this.cart = {}; // { id_produto: { qtd, preco, nome } }
-    this.selectedPlace = null;
-    this.touchStartTime = 0;
-    this.touchStartX = 0;
-    this.touchStartY = 0;
-    this.longPressTimer = null;
-    this.tempQtys = {};
-    
-    // Configurações de UX
-    this.SCROLL_THRESHOLD = 10; // pixels para distinguir scroll de tap
-    this.LONG_PRESS_DELAY = 600; // ms para acionar seletor de quantidade
-  }
-
-  /**
-   * Inicializa a sessão com dados do Backend
-   * @param {Object} initialData - Retorno do Code.gs:getInitialData()
-   */
-  init(initialData) {
-    appNotify("Iniciando componentes da sessão...", "log");
-    this.data = initialData;
-    // Load saved theme first
-    this.loadTheme();
-  
-    this.renderPlaces();
-    const saved = localStorage.getItem('costa_verde_session');
-    this.hideLoader()
-    if (saved) {
-      const parsed = JSON.parse(saved);
-      this.cart = parsed.cart;
-      if (parsed.place) {
-        this.selectPlace(parsed.place.id);
-      }
-    }
-  }
-
-  /**
-   * Renderiza a lista de locais (Clientes/Endereços)
-   * Entry-point: Carregamento do App
-   */
-  renderPlaces() {
-    const container = document.getElementById('app-ui');
-    appNotify("Renderizando lista de lugares", "log");
-
-    let html = `<div class="places-grid">`;
-    this.data.enderecos.forEach(loc => {
-      const cliente = this.data.clientes.find(c => c.id === loc.cliente_id);
-      html += `
-        <div class="place-card" 
-             data-id="${loc.id}" 
-             data-clientid="${cliente.id}"
-             ontouchstart="session.handleTouchStart(event)"
-             ontouchend="session.handleTouchEnd(event, () => session.selectPlace('${loc.id}'))"
-             onclick="session.handleMouseClick(event, () => session.selectPlace('${loc.id}'))">
-          <h3 class="theme-text">${cliente.nome}</h3>
-          <p class="theme-text">${loc.logradouro}</p>
-          <small class="theme-text">${loc.referencia}</small>
-        </div>`;
-    });
-    html += `</div>`;
-    
-    container.innerHTML = html;
-  }
-
-  /**
-   * HANDLER: Toque Inicial (Prevenção de clique fantasma e scroll)
-   */
-  handleTouchStart(e) {
-  const touch = e.touches[0];
-  this.touchStartTime = Date.now();
-  this.touchStartX = touch.clientX;
-  this.touchStartY = touch.clientY;
-  this.currentY = touch.clientY; // Inicializa posição atual
-  }
-
-  // Novo método à classe - 3
-  handleTouchMove(e) {
-  this.currentY = e.touches[0].clientY;
-  
-  // Se estiver em modo de ajuste, impede o scroll da página para não atrapalhar
-  if (this.isDynamicAdjusting) {
-      e.preventDefault();
-    }
-  }
-
-  /**
-   * HANDLER: Fim do Toque com validação de movimento
-   */
-  handleTouchEnd(e, callback) {
-    const touchEndX = e.changedTouches[0].clientX;
-    const touchEndY = e.changedTouches[0].clientY;
-    
-    const moveX = Math.abs(touchEndX - this.touchStartX);
-    const moveY = Math.abs(touchEndY - this.touchStartY);
-
-    // Se o usuário moveu o dedo mais que o threshold, é um scroll, não um clique
-    if (moveX < this.SCROLL_THRESHOLD && moveY < this.SCROLL_THRESHOLD) {
-      const duration = Date.now() - this.touchStartTime;
-      if (duration < this.LONG_PRESS_DELAY) {
-        e.preventDefault(); // Evita clique duplo (touch + click)
-        callback();
-      }
-    }
-  }
-
-  /**
-   * HANDLER: Fallback para Desktop
-   */
-  handleMouseClick(e, callback) {
-    // Em dispositivos que emulam touch, handleTouchEnd já terá disparado
-    if (e.pointerType === 'touch') return; 
-    callback();
-  }
-
-  /**
-   * Seleciona um local e troca o estado para a lista de produtos
-   */
-  selectPlace(placeId) {
-    this.selectedPlace = this.data.enderecos.find(e => e.id === placeId);
-    appNotify(`Local selecionado: ${this.selectedPlace.logradouro}`, "log");
-    
-    // Troca cor de fundo do UI dinamicamente
-    document.body.style.backgroundColor = "#f0f7f4"; // Tom suave de menta/limpeza
-    
-    // Mostrar disclaimer e renderizar produtos
-    document.getElementById('total-disclaimer').classList.remove('hidden');
-    this.renderProducts();
-  }
-
-
-  // 2
-  /**
-   * Renderiza a lista de produtos com suporte a busca e filtros.
-   * @param {string} filterText - Texto para filtragem (opcional)
-   */
-  renderProducts(filterText = "") {
-    const container = document.getElementById('app-ui');
-    const searchVal = filterText.toLowerCase();
-    
-    // Filtra os produtos localmente sem nova requisição ao servidor
-    const filtered = this.data.produtos.filter(p => 
-      p.nome.toLowerCase().includes(searchVal) || 
-      p.descr.toLowerCase().includes(searchVal)
-    );
-
-    appNotify(`Renderizando ${filtered.length} produtos. Filtro: "${filterText}"`, "log");
-
-    let html = `
-      <div class="search-container">
-        <input type="text" id="prod-search" placeholder="Buscar bebida..." 
-              oninput="session.handleSearch(this.value)" value="${filterText}">
-      </div>
-      <div class="product-list">
-    `;
-    /**
-     * Graças ao método updateUI() que criamos anteriormente, enquanto o usuário desliza o dedo para cima
-     * a bolha mint e o total no rodapé sobem em tempo real, dando uma sensação de controle total.
-     * O usuário não precisa "martelar" o dedo na tela para pedir 50 unidades. Ele apenas segura e desliza.
-     * O uso de setInterval de 100ms garante que a interface não trave, mantendo os 60fps de animação do browser.
-     */
-    filtered.forEach(p => {
-      const qtyInCart = this.cart[p.id]?.qtd || 0;
-      const hasItem = qtyInCart > 0;
-      const tempQty = this.tempQtys?.[p.id] || 0;
-
-      html += `
-        <div class="product-item" id="item-${p.id}">
-          <details>
-            <summary>
-              <div class="prod-info">
-                <span class="prod-name">${p.nome}</span>
-                <span class="prod-price">R$ ${p.preco.toFixed(2)}</span>
-              </div>
-              <div class="mint-bubble ${hasItem ? '' : 'hidden'}" id="bubble-${p.id}">
-                ${qtyInCart}
-              </div>
-            </summary>
-            <div class="prod-details">
-              <p class="descr-text">${p.descr}</p>
-              <div class="qty-container">
-                <div class="qty-controls-row">
-                  <button class="btn-qty btn-minus" 
-                          ontouchstart="session.startLongPress('${p.id}', -1)" 
-                          ontouchend="session.cancelLongPress()"
-                          onclick="session.updateQty('${p.id}', -1)">−</button>
-                  
-                  <span class="qty-display" id="temp-qty-${p.id}" 
-                        onclick="session.openQtyModal('${p.id}')"
-                        style="cursor: pointer; user-select: none;"
-                        title="Clique para digitar a quantidade">
-                    ${tempQty || 0}
-                  </span>
-                  
-                  <button class="btn-qty btn-plus" 
-                          ontouchstart="session.startLongPress('${p.id}', 1)" 
-                          ontouchend="session.cancelLongPress()"
-                          onclick="session.updateQty('${p.id}', 1)">+</button>
-                  
-                  <button class="btn-send-cart" onclick="session.sendToCart('${p.id}')">
-                    ENVIAR ^
-                  </button>
-                </div>
-              </div>
-            </div>
-          </details>
-        </div>
-      `;
-    });
-
-    html += `</div>`;
-    container.innerHTML = html;
-    
-    // Foca o input se o usuário estiver digitando
-    if(filterText) document.getElementById('prod-search').focus();
-  }
-
-  /**
-   * Handler de busca com Debounce simples para performance
-   */
-  handleSearch(val) {
-    if (this.searchTimeout) clearTimeout(this.searchTimeout);
-    this.searchTimeout = setTimeout(() => {
-      // evita que o script tente re-renderizar a cada letra digitada freneticamente, melhorando a resposta tátile
-      this.renderProducts(val);
-    }, 1500);
-  }
-
-  /**
-   * Atualiza a quantidade e reflete nas bolhas e disclaimer
-   */
-  updateQty(prodId, delta) {
-    const display = document.getElementById(`temp-qty-${prodId}`);
-    let current = parseInt(display.innerText) + delta;
-    
-    // Permite valores negativos para estorno, ex: até -10
-    display.innerText = Math.max(-10, current); 
-    
-    // Feedback visual: cor de alerta se for negativo
-    display.style.color = current < 0 ? "var(--sunset-orange)" : "var(--text-color)";
-  }
-
-  sendToCart(prodId) {
-    const display = document.getElementById(`temp-qty-${prodId}`);
-    const tempQty = parseInt(display.innerText);
-    
-    if (tempQty === 0) return;
-
-    const currentInCart = this.cart[prodId]?.qtd || 0;
-    const prod = this.data.produtos.find(p => p.id === prodId);
-    
-    // Cálculo final garantindo que o carrinho nunca fique menor que zero
-    const novaQtd = Math.max(0, currentInCart + tempQty);
-
-    if (novaQtd <= 0) {
-      delete this.cart[prodId];
-      const bubble = document.getElementById(`bubble-${prodId}`);
-      if (bubble) bubble.classList.add('hidden'); // Esconde a bolha se zerar
-    } else {
-      this.cart[prodId] = {
-        qtd: novaQtd,
-        preco: prod.preco,
-        nome: prod.nome
-      };
-    }
-
-    // Feedback e Reset
-    this.createBubbles(); // Bolhas sobem mesmo no estorno!
-    document.querySelector(`#item-${prodId} details`).open = false;
-    display.innerText = "0";
-    display.style.color = "";
-    
-    this.updateUI();
-    appNotify(`Carrinho atualizado: ${prod.nome}`, "log");
-  }
-
-  /**
-   * Monitor central do DOM para atualizar bolhas e disclaimer sem re-renderizar tudo
-   *  O método updateUI atua como um observador. 
-   * Em vez de reconstruir o HTML (o que perderia o foco do scroll), 
-   * ele altera apenas as classes CSS e o texto das bolhas.
-   * 
-   */
-  updateUI() {
-      let grandTotal = 0;
-      let totalItems = 0;
-
-      // Percorre o carrinho para somar totais
-      for (const id in this.cart) {
-        const item = this.cart[id];
-        grandTotal += (item.qtd * item.preco);
-        totalItems += item.qtd;
-
-        // Atualiza a bolha mint se ela estiver visível no ecrã atual
-        const bubble = document.getElementById(`bubble-${id}`);
-        if (bubble) {
-          bubble.innerText = item.qtd;
-          bubble.classList.remove('hidden');
-        }
-      }
-
-      // Atualiza os globais
-      const cartBubble = document.getElementById('cart-bubble');
-      if(cartBubble) cartBubble.innerText = totalItems;
-      
-      // Optional: Add visual feedback when cart becomes empty
-      if (totalItems === 0) {
-        cartBubble.classList.add('empty-cart'); // You can style this differently
-      } else {
-        cartBubble.classList.remove('empty-cart');
-      }
-    
-      
-      const totalVal = document.getElementById('total-value');
-      if(totalVal) totalVal.innerText = `R$ ${grandTotal.toFixed(2)}`;
-    
-    // Hide total disclaimer if cart is empty
-    const disclaimer = document.getElementById('total-disclaimer');
-    if (disclaimer) {
-      if (totalItems === 0) {
-        disclaimer.classList.add('hidden');
-      } else {
-        disclaimer.classList.remove('hidden');
-      }
-    }
-
-    }
-
-  // end-2
-  // init - 3
-  /**
-   * Inicia o temporizador de Long Press e prepara o monitor de movimento.
-   */
-  startLongPress(prodId, direction) {
-    // Cancela qualquer timer residual
-    this.cancelLongPress();
-
-    // Define o timer para ativar o modo "Ajuste Veloz" após 500ms
-    this.longPressTimer = setTimeout(() => {
-      appNotify(`Ajuste dinâmico ativado para: ${prodId}`, "log");
-      this.isDynamicAdjusting = true;
-      this.dynamicProdId = prodId;
-      this.dynamicBaseY = this.touchStartY; // Referência inicial do toque
-      
-      // Inicia o loop de incremento/decremento
-      this.accelerationInterval = setInterval(() => {
-        this.applyDynamicAdjustment();
-      }, 100); // 10 ticks por segundo
-    }, this.LONG_PRESS_DELAY);
-  }
-
-  /**
-   * Calcula a velocidade baseada na distância do deslize (Slide)
-   */
-  applyDynamicAdjustment() {
-    if (!this.isDynamicAdjusting) return;
-
-    // Distância do deslize: Negativo para cima, Positivo para baixo
-    const deltaY = this.currentY - this.dynamicBaseY;
-    
-    // Sensibilidade: 1 unidade a cada 20px de deslize
-    // Invertemos o deltaY porque deslizar para CIMA (y menor) deve aumentar a qtd
-    let speed = Math.round(-deltaY / 20); 
-    
-    if (speed !== 0) {
-      this.updateQty(this.dynamicProdId, speed);
-      // Haptic Feedback simples (se suportado pelo browser/dispositivo)
-      if (navigator.vibrate) navigator.vibrate(10);
-    }
-  }
-
-  /**
-   * Finaliza os processos de longpress e limpeza de memória
-   */
-  cancelLongPress() {
-    if (this.longPressTimer) clearTimeout(this.longPressTimer);
-    if (this.accelerationInterval) clearInterval(this.accelerationInterval);
-    
-    this.isDynamicAdjusting = false;
-    this.dynamicProdId = null;
-  }
-
-  // end-3
-  // init -4
-  /**
-   * Limpa o carrinho e reseta a interface para a seleção de lugares
-   */
-  reset() {
-    if (Object.keys(this.cart).length > 0) {
-      if (!confirm("Deseja realmente limpar seu pedido atual?")) return;
-    }
-    
-    appNotify("Resetando sessão e limpando carrinho", "log");
-    this.cart = {};
-    this.selectedPlace = null;
-    
-    // Limpa cache local
-    localStorage.removeItem('costa_verde_session');
-    
-    //Close Confirm MOdal
-    this.closeModal();
-    // Reseta UI
-    document.body.style.backgroundColor = "";  
-    
-    // Update UI to reflect empty cart
-    this.updateUI();
-    this.renderPlaces();
-  }
-  // 0utro - 6
-  /**
-   * Prepara e abre o modal com o resumo do carrinho
-   */
-  openConfirmModal() {
-    if (Object.keys(this.cart).length === 0) {
-      appNotify("Adicione itens antes de confirmar!", "error");
-      return;
-    }
-
-    // 1. Preencher Destino
-    const dest = document.getElementById('summary-destination');
-    dest.innerHTML = `
-      <strong>Entregar em:</strong><br>
-      ${this.selectedPlace.logradouro}<br>
-      <small>${this.selectedPlace.referencia}</small>
-    `;
-
-    // 2. Listar Itens (Somente o que tem Qtd > 0)
-    const itemsList = document.getElementById('summary-items');
-    let itemsHtml = '<ul>';
-    let total = 0;
-
-    for (const id in this.cart) {
-      const item = this.cart[id];
-      const subtotal = item.qtd * item.preco;
-      total += subtotal;
-      itemsHtml += `
-        <li>
-          <span>${item.qtd}x ${item.nome}</span>
-          <span>R$ ${subtotal.toFixed(2)}</span>
-        </li>`;
-    }
-    itemsHtml += '</ul>';
-    itemsList.innerHTML = itemsHtml;
-
-    // 3. Atualizar Total e Exibir
-    document.getElementById('modal-total-value').innerText = `R$ ${total.toFixed(2)}`;
-    document.getElementById('modal-confirm').classList.remove('hidden');
-    
-    appNotify("Modal de confirmação aberto", "log");
-  }
-
-  /**
-   * Fecha o modal e limpa estados temporários
-   */
-  closeModal() {
-    document.getElementById('modal-confirm').classList.add('hidden');
-  }
-  // end of ouro - 6
-  /**
-   * Envia o pedido para o Backend (Code.gs)
-   */
-  submit() {
-    const btnModal = document.getElementById('btn-final-submit');
-    const btnFooter = document.getElementById('btn-submit');
-    
-    // Bloqueio de UI imediato
-    if(btnModal) { btnModal.disabled = true; btnModal.innerText = "Processando..."; }
-    if(btnFooter) { btnFooter.disabled = true; btnFooter.innerText = "Enviando..."; }
-
-    const itensArray = Object.entries(this.cart).map(([id, info]) => ({
-      id: id,
-      nome: info.nome,
-      qtd: info.qtd,
-      preco: info.preco
-    }));
-
-    const payload = {
-      cliente_id: this.selectedPlace.cliente_id,
-      endereco_id: this.selectedPlace.id,
-      itens: itensArray,
-      total: parseFloat(document.getElementById('modal-total-value').innerText.replace('R$ ', '').replace(',', '.'))
-    };
-
-    appNotify(`Enviando pedido de ${payload.total} para o servidor...`, "log");
-
-    google.script.run
-      .withSuccessHandler(res => {
-        if (res.success) {  
-          if(this.playSound) this.playSound('chime');
-          appNotify(`Pedido ${res.pedidoId} confirmado!`, "success");
-          this.cart = {};
-          this.closeModal();
-          this.reset(); 
-        } else {
-          this.handleError("Erro no servidor: " + res.error);
-        }
-      })
-      .withFailureHandler(err => {
-        this.handleError("Falha de rede: " + err.message);
-      })
-      .processOrder(payload);
-  }
-
-
-  /**
-   * Handler central de erros para reativar a UI
-   */
-  handleError(msg) {
-    appNotify(msg, "error");
-    const btnModal = document.getElementById('btn-final-submit');
-    const btnFooter = document.getElementById('btn-submit');
-    if(btnModal) { btnModal.disabled = false; btnModal.innerText = "Enviar para Fábrica"; }
-    if(btnFooter) { btnFooter.disabled = false; btnFooter.innerText = "Confirmar Pedido"; }
-  }
-
-  //end - 4
-  // init - 5
-  /**
-   * Alterna a visualização do resumo do carrinho ou rola para o total
-   */
-  toggleCart() {
-    const totalArea = document.getElementById('total-disclaimer');
-    if (totalArea.classList.contains('hidden')) {
-      appNotify("Adicione itens para ver o carrinho", "log");
-      return;
-    }
-    
-    // Scroll suave até o final para finalizar o pedido
-    totalArea.scrollIntoView({ behavior: 'smooth' });
-    
-    // Efeito visual de destaque no total
-    const valueDisp = document.getElementById('total-value');
-    valueDisp.style.transform = "scale(1.2)";
-    setTimeout(() => valueDisp.style.transform = "scale(1)", 300);
-  }
-  /**
-   * Alterna entre modo claro e escuro
-   */
-  toggleTheme() {
-    const body = document.body;
-    const currentTheme = body.getAttribute('data-theme');
-    
-    // If no theme set or current theme is system-dependent
-    if (!currentTheme || currentTheme === 'system') {
-      // Check system preference
-      const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-      const newTheme = systemPrefersDark ? 'light' : 'dark';
-      body.setAttribute('data-theme', newTheme);
-      document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '☀️' : '⚫';
-    } else {
-      // Toggle between light and dark
-      const newTheme = currentTheme === 'dark' ? 'light' : 'dark';
-      body.setAttribute('data-theme', newTheme);
-      document.getElementById('theme-icon').innerText = newTheme === 'dark' ? '☀️' : '⚫';
-    }
-    
-    localStorage.setItem('theme_pref', body.getAttribute('data-theme'));
-    appNotify(`Tema alterado`, "log");
-  }
-
-  // Add this to your init method to load saved preference
-  loadTheme() {
-    const savedTheme = localStorage.getItem('theme_pref');
-    if (savedTheme) {
-      document.body.setAttribute('data-theme', savedTheme);
-      document.getElementById('theme-icon').innerText = savedTheme === 'dark' ? '☀️' : '⚫';
-    } else {
-      // Check system preference
-      //const systemPrefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
-       document.body.setAttribute('data-theme', 'light');
-    document.getElementById('theme-icon').innerText = '⚫';
-    }
-  }
-  /**
-   * Cria partículas de bolhas ao adicionar itens
-   */
-  createBubbles() {
-    const container = document.getElementById('app-main-container');
-    if (!container) return; // Impede o erro se o container não for encontrado
-    for(let i=0; i<5; i++) {
-      const b = document.createElement('div');
-      b.className = 'bubble-particle';
-      const size = Math.random() * 10 + 5;
-      b.style.width = `${size}px`;
-      b.style.height = `${size}px`;
-      b.style.left = `${Math.random() * 100}%`;
-      b.style.animationDuration = `${Math.random() * 2 + 1}s`;
-      container.appendChild(b);
-      setTimeout(() => b.remove(), 4000);
-    }
-  }
-
-  /**
-   * Finaliza a animação de entrada
-   */
-  hideLoader() {
-    const loader = document.getElementById('beer-loader');
-    setTimeout(() => {
-      loader.style.transform = "translateY(-100%)"; // A espuma "sobe" e sai da tela
-      if(this.playSound) this.playSound('chime');
-    }, 2000);
-  }
-  // end - 5
-  playSound(type) {
-    const ctx = new (window.AudioContext || window.webkitAudioContext)();
-    const osc = ctx.createOscillator();
-    const gain = ctx.createGain();
-    
-    osc.type = type === 'pop' ? 'sine' : 'square';
-    osc.frequency.setValueAtTime(type === 'pop' ? 400 : 800, ctx.currentTime);
-    osc.frequency.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-    
-    gain.gain.setValueAtTime(0.1, ctx.currentTime);
-    gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.1);
-    
-    osc.connect(gain);
-    gain.connect(ctx.destination);
-    
-    osc.start();
-    osc.stop(ctx.currentTime + 0.1);
-  }
-
-
-
-// Modal state
-currentQtyProductId = null;
-
-// Open quantity modal
-openQtyModal(productId) {
-  const product = this.data.produtos.find(p => p.id === productId);
-  if (!product) return;
-  
-  this.currentQtyProductId = productId;
-  
-  // Get current quantity from cart or default to 1
-  const currentQty = this.cart[productId]?.qtd || 1;
-  
-  // Update modal content
-  document.getElementById('modal-product-name').textContent = product.nome;
-  document.getElementById('modal-product-price').textContent = `R$ ${product.preco.toFixed(2)}`;
-  
-  const input = document.getElementById('modal-qty-input');
-  input.value = currentQty;
-  input.min = 1;
-  input.max = 999;
-  
-  // Show modal
-  document.getElementById('qty-modal').classList.remove('hidden');
-  
-  // Focus and select input
-  setTimeout(() => {
-    input.focus();
-    input.select();
-  }, 100);
-  
-  // Add keyboard support
-  input.onkeypress = (e) => {
-    if (e.key === 'Enter') {
-      this.confirmQtyInput();
-    }
-  };
+<style>
+:root {
+  /* Paleta Light */
+  --mint-primary: #2ecc71;
+  --mint-light: #e8f8f0;
+  --bg-color: #ffffff;
+  --text-color: #2c3e50;
+  --card-bg: #f9f9f9;
+    /* Paleta Orla Sul & Costa Verde */
+  --gold-barley: #d4af37;
+  --ocean-blue: #2980b9;
+  --mint-action: #2ecc71;
+  --sunset-orange: #e67e22;
+  --sand-bg: #f4e7d3;
+  --bg-main: #ffffff;
+  --text-main: #2c3e50;
+  --card-bg: #ffffff;
+  --foam-white: #ffffff;
+  --beer-gold: #f1c40f;
+  --bg-side-1: var(--gold-barley);
+  --bg-side-2: var(--mint-action);
+  --bg-center: #ffffff;
+}
+html, body {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  overflow: hidden;
 }
 
-// Close modal
-closeQtyModal() {
-  document.getElementById('qty-modal').classList.add('hidden');
-  this.currentQtyProductId = null;
+#app-main-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  width: 100%;
+  max-width: 600px;
+  margin: 0 auto;
+  background: var(--card-bg);
+  position: relative;
 }
 
-// Confirm quantity input
-confirmQtyInput() {
-  const input = document.getElementById('modal-qty-input');
-  let qty = parseInt(input.value);
-  
-  // Validate input
-  if (isNaN(qty) || qty < 1) qty = 1;
-  if (qty > 999) qty = 999;
-  
-  if (this.currentQtyProductId) {
-    // Update the temporary quantity display
-    const tempDisplay = document.getElementById(`temp-qty-${this.currentQtyProductId}`);
-    if (tempDisplay) {
-      tempDisplay.textContent = qty;
-    }
-    
-    // Optionally auto-send to cart or just update temp
-    // You can either:
-    // 1. Auto-send: this.sendToCart(this.currentQtyProductId, qty);
-    // 2. Just update temp and let user click ENVIAR
-    
-    // Store in a temporary variable if needed
-    if (!this.tempQtys) this.tempQtys = {};
-    this.tempQtys[this.currentQtyProductId] = qty;
+#app-header {
+  flex-shrink: 0;
+  padding: 15px;
+  background: var(--card-bg);
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+  z-index: 10;
+}
+
+#app-ui {
+  flex: 1;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  padding: 10px 10px 130px; /* Bottom padding for footer */
+  scroll-behavior: smooth;
+}
+/* Reset button background */
+#total-disclaimer .btn-reset,
+.btn-reset {
+  background-color: var(--sunset-orange) !important;
+}
+/* Submit button background */
+#total-disclaimer .btn-submit,
+#total-disclaimer #btn-submit,
+.btn-submit,
+#btn-submit {
+  background: linear-gradient(135deg, var(--ocean-blue), #1c5980) !important;
+}
+
+/* Hover states - invert colors */
+#total-disclaimer .btn-reset:hover,
+.btn-reset:hover {
+  background: transparent !important;
+  color: var(--sunset-orange) !important;
+  border: 2px solid var(--sunset-orange) !important;
+}
+
+#total-disclaimer .btn-submit:hover,
+#total-disclaimer #btn-submit:hover,
+.btn-submit:hover,
+#btn-submit:hover {
+  background: transparent !important;
+  color: var(--ocean-blue) !important;
+  border: 2px solid var(--ocean-blue) !important;
+}
+
+/* Remove any conflicting styles */
+#total-disclaimer button {
+  /* Reset any inherited colors */
+  color: white !important;
+}
+
+#total-disclaimer .btn-reset,
+#total-disclaimer .btn-submit,
+#total-disclaimer #btn-submit,
+.btn-reset,
+.btn-submit,
+#btn-submit {
+  color: white !important;
+}
+@media (prefers-color-scheme: dark, max-width: 380px) {
+  :root {
+    --bg-color: #1a1a1a;
+    --text-color: #ecf0f1;
+    --text-main: #e0e0e0; 
+    --card-bg: #2c2c2c;
+  }
+  #cart-bubble,
+  .bubble,
+  .cart-container .bubble {
+    color: #ffffff !important;  /* Reinforce white text in dark mode */
+    background: #e74c3c;  /* Keep consistent background */
+  }
+  .modal-content {
+    background: var(--card-bg);
+    border-color: rgba(255, 255, 255, 0.1);
   }
   
-  this.closeQtyModal();
-}
+  .modal-input {
+    background: var(--bg-color);
+    border-color: var(--mint-action);
+  }
+  
+  .btn-reset {
+    background-color: var(--sunset-orange) !important;
+  }
+  
+  .btn-reset:hover {
+    background: transparent;
+    color: #e67e22;
+    border-color: #e67e22;
+  }
+  
+  .btn-submit,
+  #btn-submit {
+    background: linear-gradient(135deg, #2471a3, #1c5980);
+  }
+  
+  .btn-submit:hover,
+  #btn-submit:hover {
+    background: transparent;
+    color: #3498db;
+    border-color: #3498db;
+  }
+  
+ 
+  .br-value {
+    text-shadow: 0 2px 5px rgba(0, 0, 0, 0.3);
+  }
+  #total-disclaimer {
+    background: var(--card-bg); /* Darker background for dark mode */
+  }
+  
+  #total-disclaimer,
+  #total-disclaimer *,
+  #total-disclaimer span,
+  #total-disclaimer div,
+  #total-disclaimer .summary-row span,
+  #total-disclaimer .br-value {
+    color: var(--mint-primary) !important; /* Keep mint color in dark mode */
+  }
+
+  #total-disclaimer .btn-reset,
+  .btn-reset {
+    background-color: var(--sunset-orange) !important;
+    color: white !important;
+  }
+  
+  #total-disclaimer .btn-submit,
+  #total-disclaimer #btn-submit,
+  .btn-submit,
+  #btn-submit {
+    background: linear-gradient(135deg, #2471a3, #1c5980) !important;
+    color: white !important;
+  }
+   #app-ui {
+    padding-bottom: 140px;
+  }
+  
+  #total-disclaimer {
+    padding: 12px 15px;
+  }
+  
+  .button-group {
+    gap: 8px;
+  }
 
 }
-// Instanciação Global
-const session = new AppSession();
+/* Base text color for everything */
+* {
+  color: var(--text-main);
+}
 
-</script>
+/* Override for elements that might need different colors */
+button, .btn, .mint-bubble, .bubble {
+  /* These will keep their specific colors */
+  color: white;
+}
+
+/* Headers and other elements will inherit the main color */
+h1, h2, h3, h4, h5, h6, p, span, div, small {
+  color: var(--text-main);
+}
+
+body { 
+  margin: 0; padding: 0;
+  display: flex;
+  justify-content: center;
+  font-family: 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(90deg, var(--bg-side-1) 0%, var(--bg-center) 15%, var(--bg-center) 85%, var(--bg-side-2) 100%);
+  transition: all 0.5s ease;
+  min-height: 100vh;
+}
+/* O Frame "Cartão" Central */
+/* Alinhamento do Header e Footer no Frame */
+#app-header {
+  padding: 15px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: var(--card-bg);
+  border-bottom: 1px solid rgba(0,0,0,0.1);
+}
+.mint-bubble {
+  background-color: var(--mint-action);
+  color: white;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 12px;
+  font-size: 0.85rem;
+  box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+}
+
+
+/* Correção do Visor do Carrinho */
+.cart-container {
+  position: relative;
+  cursor: pointer;
+  padding: 10px;
+}
+
+.bubble {
+  position: absolute;
+  top: 0; right: 0;
+  background: #e74c3c;
+  color: white;
+  border-radius: 50%;
+  padding: 2px 6px;
+  font-size: 11px;
+  font-weight: bold;
+}
+
+.hidden { display: none !important; }
+
+/* Product Item Collapsible */
+details {
+  background: var(--card-bg);
+  margin: 10px;
+  padding: 15px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.05);
+}
+
+
+.qty-controls {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  justify-content: center;
+  padding: 15px;
+}
+
+.btn-plus { background-color: var(--mint-action) !important; color: white !important; }
+.btn-minus { background-color: var(--sunset-orange) !important; color: white !important; }
+
+/* Remova ou ajuste a cor de fundo genérica para não conflitar */
+.btn-qty {
+  border: none;
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  font-size: 1.5rem;
+  display: flex; align-items: center; justify-content: center;
+  cursor: pointer;
+}
+
+
+
+
+.qty-controls-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8f9fa;
+  padding: 10px;
+  border-radius: 50px; /* Estilo pílula */
+  border: 1px solid #ddd;
+}
+
+.qty-display {
+  font-size: 1.5rem;
+  font-weight: bold;
+  min-width: 40px;
+  text-align: center;
+  cursor: pointer;
+  padding: 5px 10px;
+  border-radius: 20px;
+  transition: background-color 0.2s;
+  color: #2c3e50;
+}
+
+.qty-display:hover {
+  background: rgba(46, 204, 113, 0.1);
+}
+
+.qty-display:active {
+  transform: scale(0.95);
+}
+
+.btn-send-cart {
+  background-color: var(--ocean-blue);
+  color: white;
+  border: none;
+  padding: 10px 15px;
+  border-radius: 20px;
+  font-weight: bold;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+
+.btn-send-cart:active { transform: scale(0.9); }
+
+/* Card de Produto */
+.place-card {
+  background: var(--card-bg);
+  color: var(--text-main);
+  transition: all 0.3s ease;
+}
+
+.place-card h3,
+.place-card p,
+.place-card small {
+  color: var(--text-main);
+}
+
+.place-card:hover {
+  background: var(--card-bg);
+  filter: brightness(1.1);
+}
+
+/* For the static HTML elements */
+#app-header h1,
+#app-header .cart-container span {
+  color: var(--text-main);
+}
+
+/* Search input text color */
+#prod-search {
+  background: var(--card-bg);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.1);
+  
+  width: 90%;
+  margin: 15px auto;
+  display: block;
+  padding: 12px;
+  border-radius: 25px;
+  border: 1px solid #ddd;
+}
+
+#prod-search::placeholder {
+  color: var(--text-main);
+  opacity: 0.7;
+}
+/* Inputs de Busca */
+
+/* Itens de Produto */
+.product-item {
+  margin: 10px;
+  background: var(--card-bg);
+  border-radius: 12px;
+  color: var(--text-main);
+}
+
+/* Force cart bubble text to always be white */
+#cart-bubble,
+.bubble,
+.cart-container .bubble {
+  color: #ffffff !important;  /* Force white text */
+  background: #e74c3c;  /* Keep the red background */
+}
+
+
+
+/* Also handle any potential inline styles or theme toggles */
+[data-theme="dark"] #cart-bubble,
+[data-theme="dark"] .bubble {
+  color: #ffffff !important;
+}
+[data-theme="dark"] {
+  --bg-main: #121212;
+  --text-main: #e0e0e0;
+  --card-bg: #1e1e1e;
+  --foam-white: #fdfdfd;   /* A espuma continua clara para o contraste do loader */
+  --bg-side-1: #4d3d0a; 
+  --bg-side-2: #145a32;
+  --bg-center: #121212;
+}
+
+/* Animação Inicial: A Espuma de Chopp */
+#beer-loader {
+  position: fixed;
+  top: 0; left: 0; width: 100%; height: 100%;
+  background-color: var(--foam-white);
+  z-index: 9999;
+  display: flex; justify-content: center; align-items: center;
+  transition: transform 1s cubic-bezier(0.85, 0, 0.15, 1);
+}
+
+.foam-layer {
+  position: absolute;
+  bottom: 0; width: 100%; height: 100%;
+  background: var(--beer-gold);
+  animation: fillBeer 2s forwards;
+}
+
+@keyframes fillBeer {
+  0% { height: 0%; }
+  100% { height: 100%; }
+}
+
+/* Bolhas de Fundo */
+.bubble-particle {
+  position: absolute;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 50%;
+  bottom: -20px;
+  animation: rise 3s infinite ease-in;
+  pointer-events: none;
+}
+
+@keyframes rise {
+  0% { transform: translateY(0) scale(1); opacity: 0; }
+  50% { opacity: 0.5; }
+  100% { transform: translateY(-300px) scale(1.5); opacity: 0; }
+}
+
+/* Switcher de Tema */
+.theme-toggle {
+  position: relative; top: -5px;
+  cursor: pointer; font-size: 1.5rem;
+  z-index: 100;
+}
+
+.product-item:hover { box-shadow: 0 6px 12px rgba(0,0,0,0.1); }
+.br-value { font-weight: bold; font-size: 1.2rem; color: var(--text-color); }
+
+/* Modal Styles */
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(5px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  opacity: 1;
+  transition: opacity 0.3s ease;
+}
+
+.modal.hidden {
+  display: none;
+}
+
+.modal-content {
+  background: var(--card-bg);
+  border-radius: 20px;
+  padding: 20px;
+  width: 90%;
+  max-width: 350px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
+  transform: scale(1);
+  transition: transform 0.3s ease;
+  border: 2px solid transparent;
+  border-image: linear-gradient(135deg, var(--gold-barley), var(--mint-action), var(--ocean-blue)) 1;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.1);
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: var(--text-main);
+  font-size: 1.3rem;
+}
+
+.modal-close {
+  font-size: 28px;
+  font-weight: bold;
+  cursor: pointer;
+  color: var(--text-main);
+  opacity: 0.7;
+  transition: opacity 0.2s;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  opacity: 1;
+}
+
+.modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.modal-product-info {
+  display: flex;
+  justify-content: space-between;
+  padding: 10px;
+  background: var(--bg-color);
+  border-radius: 10px;
+  color: var(--text-main);
+  font-weight: bold;
+}
+
+#modal-product-name {
+  color: var(--text-main);
+}
+
+#modal-product-price {
+  color: var(--mint-action);
+  font-size: 1.2rem;
+}
+
+.modal-input {
+  padding: 15px;
+  font-size: 1.5rem;
+  text-align: center;
+  border: 2px solid var(--mint-action);
+  border-radius: 12px;
+  background: var(--card-bg);
+  color: var(--text-main);
+  font-weight: bold;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.modal-input:focus {
+  outline: none;
+  border-color: var(--ocean-blue);
+  box-shadow: 0 0 0 3px rgba(46, 204, 113, 0.2);
+}
+
+/* Remove spinner buttons from number input */
+.modal-input::-webkit-inner-spin-button,
+.modal-input::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.modal-input[type=number] {
+  -moz-appearance: textfield;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.modal-actions button {
+  flex: 1;
+  padding: 12px;
+  font-size: 1rem;
+}
+
+[data-theme="dark"] .modal-content {
+  background: var(--card-bg);
+}
+/* Base Button Styles */
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 50px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  gap: 8px;
+}
+
+.btn-primary {
+  background: var(--mint-action);
+  color: white;
+}
+
+.btn-primary:hover {
+  background: transparent;
+  color: var(--mint-action);
+  border: 2px solid var(--mint-action);
+}
+/* Footer Button Styles */
+.button-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 15px;
+  justify-content: space-between;
+}
+.btn-reset, 
+.btn-submit,
+#btn-submit {
+  flex: 1;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 50px;
+  font-size: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+  text-transform: uppercase;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+.btn-submit,
+#btn-submit {
+  background: linear-gradient(135deg, var(--ocean-blue), #1c5980);
+  color: white;
+  border: 2px solid transparent;
+  position: relative;
+  z-index: 1;
+}
+
+#total-disclaimer {
+  position: sticky;  
+  bottom: 0; 
+  width: 100%;
+  left: 0;
+  background: var(--mint-light);
+  padding: 20px;
+  box-sizing: border-box;
+  z-index: 100;
+  box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+  display: flex; 
+  flex-direction: column;
+}
+/* Set color for the disclaimer container and all its children */
+#total-disclaimer,
+#total-disclaimer *,
+#total-disclaimer span,
+#total-disclaimer div,
+#total-disclaimer .summary-row span,
+#total-disclaimer .br-value {
+  color: var(--mint-primary) !important;
+}
+
+
+
+/* Add safe area for notched phones */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  #total-disclaimer {
+    padding-bottom: calc(15px + env(safe-area-inset-bottom));
+  }
+  
+  #app-ui {
+    padding-bottom: calc(130px + env(safe-area-inset-bottom));
+  }
+}
+
+/* Ensure the last product is visible */
+.product-item:last-child {
+  margin-bottom: 20px;
+}
+
+/* Optional: Add a "scroll to bottom" indicator */
+.scroll-indicator {
+  text-align: center;
+  color: var(--mint-action);
+  font-size: 0.8rem;
+  padding: 5px;
+  opacity: 0.7;
+}
+</style>
